@@ -137,6 +137,10 @@ contract FundImplementation is FundStorage, NameVersion {
 
     function invest(uint256 amount, int256 priceLimit) external {
         address user = msg.sender;
+        require(
+            userRedeemRequests[user].id == 0,
+            "invest: ongoing claim request"
+        );
         // transfer in B0
         tokenB0.safeTransferFrom(user, address(this), amount);
 
@@ -158,15 +162,7 @@ contract FundImplementation is FundStorage, NameVersion {
             new IPool.OracleSignature[](0)
         );
 
-        int256 diff = calculateBnbDiff();
-        if (diff != 0) {
-            pool.trade(
-                symbolName,
-                -diff,
-                priceLimit,
-                new IPool.OracleSignature[](0)
-            );
-        }
+        balanceBnbDiff(priceLimit);
 
         // calculate shareValue after invest and mint
         (int256 curTotalValue, ) = calculateTotalValue(true);
@@ -188,8 +184,16 @@ contract FundImplementation is FundStorage, NameVersion {
     function requestRedeem(uint256 amountShare) external {
         address user = msg.sender;
         require(
-            amountShare <= balanceOf(user),
-            "requestRedeem: exceed balance"
+            userRedeemRequests[user].id == 0,
+            "requestRedeem: ongoing claim request"
+        );
+
+        uint256 amountShare = balanceOf(user);
+        require(amountShare > 0, "requestRedeem: zero balance");
+        IERC20(address(this)).safeTransferFrom(
+            user,
+            address(this),
+            amountShare
         );
 
         // B0 swap and stake
@@ -236,15 +240,7 @@ contract FundImplementation is FundStorage, NameVersion {
         pendingShare -= redeemRequest.share;
 
         // close bnb position
-        int256 diff = calculateBnbDiff();
-        if (diff != 0) {
-            pool.trade(
-                symbolName,
-                -diff,
-                priceLimit,
-                new IPool.OracleSignature[](0)
-            );
-        }
+        balanceBnbDiff(priceLimit);
 
         // calculate position value
         uint256 pTokenId = getPtokenId(address(this));
@@ -300,15 +296,7 @@ contract FundImplementation is FundStorage, NameVersion {
         uint256 resultB0 = staker.swapStakerBnbToB0(amountInStakerBnb);
 
         // close bnb position
-        int256 diff = calculateBnbDiff();
-        if (diff != 0) {
-            pool.trade(
-                symbolName,
-                -diff,
-                priceLimit,
-                new IPool.OracleSignature[](0)
-            );
-        }
+        balanceBnbDiff(priceLimit);
 
         // calculate position value
         uint256 pTokenId = getPtokenId(address(this));
@@ -361,15 +349,7 @@ contract FundImplementation is FundStorage, NameVersion {
             );
         }
 
-        int256 diff = calculateBnbDiff();
-        if (diff != 0) {
-            pool.trade(
-                symbolName,
-                -diff,
-                priceLimit,
-                new IPool.OracleSignature[](0)
-            );
-        }
+        balanceBnbDiff(priceLimit);
     }
 
     function _approveSwapper(address _swapper, address asset) internal {
@@ -493,19 +473,6 @@ contract FundImplementation is FundStorage, NameVersion {
         bnbValue = (getPrice() * bnbAmount) / UONE;
     }
 
-    function calculateBnbDiff() internal view returns (int256 diff) {
-        uint256 tokenId = getPtokenId(address(this));
-        ILensSymbol s = ILensSymbol(symbolAddress);
-        int256 shortAmount = s.positions(tokenId).volume;
-        uint256 longAmount = pendingBnb +
-            staker.convertToBnb(stakerBnb.balanceOf(address(staker)));
-        longAmount.log("calculateBnbDiff.longAmount");
-        shortAmount.log("calculateBnbDiff.shortAmount");
-        diff =
-            ((longAmount.utoi() + shortAmount) / minTradeVolume) *
-            minTradeVolume;
-        diff.log("diff");
-    }
 
     function calculatePositionValue(uint256 pTokenId, bool isDeposit)
         internal
@@ -546,6 +513,25 @@ contract FundImplementation is FundStorage, NameVersion {
         shareValue = totalSupply() > 0
             ? (totalValue * ONE) / totalSupply().utoi()
             : ONE;
+    }
+
+    function balanceBnbDiff(int256 priceLimit) public returns (int256 diff) {
+        uint256 tokenId = getPtokenId(address(this));
+        ILensSymbol s = ILensSymbol(symbolAddress);
+        int256 shortAmount = s.positions(tokenId).volume;
+        uint256 longAmount = pendingBnb +
+            staker.convertToBnb(stakerBnb.balanceOf(address(staker)));
+        diff =
+            ((longAmount.utoi() + shortAmount) / minTradeVolume) *
+            minTradeVolume;
+        if (diff != 0) {
+            pool.trade(
+                symbolName,
+                -diff,
+                priceLimit,
+                new IPool.OracleSignature[](0)
+            );
+        }
     }
 
 
