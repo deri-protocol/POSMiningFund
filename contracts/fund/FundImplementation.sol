@@ -127,7 +127,6 @@ contract FundImplementation is FundStorage, NameVersion {
             symbolId
         );
         minTradeVolume = ILensSymbol(symbolAddress).minTradeVolume();
-
     }
 
     function approveInvest() external _onlyAdmin_ {
@@ -181,7 +180,7 @@ contract FundImplementation is FundStorage, NameVersion {
         );
     }
 
-    function requestRedeem(uint256 amountShare) external {
+    function requestRedeem() external {
         address user = msg.sender;
         require(
             userRedeemRequests[user].id == 0,
@@ -202,15 +201,13 @@ contract FundImplementation is FundStorage, NameVersion {
             ratio) / UONE;
         uint256 amountInBnb = staker.convertToBnb(amountInStakerBnb);
 
-        userRedeemRequests[user].push(
-            RedeemRequest({
-                id: redeemId++,
-                amountInBnb: amountInBnb,
-                amountInStakerBnb: amountInStakerBnb,
-                share: amountShare,
-                startTime: block.timestamp
-            })
-        );
+        userRedeemRequests[user] = RedeemRequest({
+            id: ++redeemId,
+            amountInBnb: amountInBnb,
+            amountInStakerBnb: amountInStakerBnb,
+            share: amountShare,
+            startTime: block.timestamp
+        });
 
         // request withdraw
         staker.requestWithdraw(user, amountInStakerBnb);
@@ -227,15 +224,11 @@ contract FundImplementation is FundStorage, NameVersion {
         );
     }
 
-    function claimRedeem(
-        uint256 idx,
-        uint256 stakerIdx,
-        int256 priceLimit
-    ) external {
+    function claimRedeem(int256 priceLimit) external {
         address user = msg.sender;
-        RedeemRequest[] storage userRequests = userRedeemRequests[user];
-        require(idx < userRequests.length, "Invalid index");
-        RedeemRequest memory redeemRequest = userRequests[idx];
+        RedeemRequest storage redeemRequest = userRedeemRequests[user];
+        require(redeemRequest.id > 0, "claimRedeem: no redeem record");
+
         pendingBnb -= redeemRequest.amountInBnb;
         pendingShare -= redeemRequest.share;
 
@@ -243,28 +236,28 @@ contract FundImplementation is FundStorage, NameVersion {
         balanceBnbDiff(priceLimit);
 
         // calculate position value
-        uint256 pTokenId = getPtokenId(address(this));
-        int256 positionValue = calculatePositionValue(pTokenId, false);
+        uint256 tokenId = getPtokenId(address(this));
+        AccountInfo memory accountInfo = getAccountInfo(tokenId);
+        PositionInfo memory positionInfo = getPositionInfo(tokenId);
+        int256 positionValue = accountInfo.amountB0 +
+            accountInfo.vaultLiquidity +
+            positionInfo.accFunding;
+        positionValue += positionInfo.dpmmPnl > positionInfo.indexPnl
+            ? positionInfo.indexPnl
+            : positionInfo.dpmmPnl;
+        int256 amountB0 = accountInfo.amountB0 + positionInfo.accFunding;
         uint256 removeAmount = (positionValue.itou() * redeemRequest.share) /
             totalSupply();
-
-        AccountInfo memory accountInfo = getAccountInfo(pTokenId);
-        if (accountInfo.amountB0 >= 0) {
+        if (amountB0 < 0) removeAmount += (-amountB0).itou();
+        if (removeAmount > 0)
             pool.removeMargin(
                 address(tokenB0),
                 removeAmount,
                 new IPool.OracleSignature[](0)
             );
-        } else {
-            pool.removeMargin(
-                address(tokenB0),
-                removeAmount + (-accountInfo.amountB0).itou(),
-                new IPool.OracleSignature[](0)
-            );
-        }
 
         // claim BNB, then swap BNB to B0
-        staker.claimWithdraw(user, stakerIdx);
+        staker.claimWithdraw(user);
         (uint256 resultB0, ) = swapper.swapExactETHForB0{
             value: address(this).balance
         }();
@@ -272,22 +265,16 @@ contract FundImplementation is FundStorage, NameVersion {
         // burn share token
         _burn(user, redeemRequest.share);
 
-        // delete request record from storage
-        userRequests[idx] = userRequests[userRequests.length - 1];
-        userRequests.pop();
-
         // transfer out B0
         tokenB0.transfer(user, tokenB0.balanceOf(address(this)));
-
         emit ClaimRedeem(user, block.timestamp, redeemRequest.share);
+        delete userRedeemRequests[user];
     }
 
-    function instantRedeem(uint256 amountShare, int256 priceLimit) external {
+    function instantRedeem(int256 priceLimit) external {
         address user = msg.sender;
-        require(
-            amountShare <= balanceOf(user),
-            "requestRedeem: exceed balance"
-        );
+        uint256 amountShare = balanceOf(user);
+        require(amountShare > 0, "requestRedeem: zero balance");
 
         // B0 swap and stake
         uint256 ratio = (amountShare * UONE) / (totalSupply() - pendingShare);
@@ -299,29 +286,30 @@ contract FundImplementation is FundStorage, NameVersion {
         balanceBnbDiff(priceLimit);
 
         // calculate position value
-        uint256 pTokenId = getPtokenId(address(this));
-        int256 positionValue = calculatePositionValue(pTokenId, false);
+        uint256 tokenId = getPtokenId(address(this));
+        AccountInfo memory accountInfo = getAccountInfo(tokenId);
+        PositionInfo memory positionInfo = getPositionInfo(tokenId);
+        int256 positionValue = accountInfo.amountB0 +
+            accountInfo.vaultLiquidity +
+            positionInfo.accFunding;
+        positionValue += positionInfo.dpmmPnl > positionInfo.indexPnl
+            ? positionInfo.indexPnl
+            : positionInfo.dpmmPnl;
+        int256 amountB0 = accountInfo.amountB0 + positionInfo.accFunding;
         uint256 removeAmount = (positionValue.itou() * amountShare) /
             totalSupply();
-        AccountInfo memory accountInfo = getAccountInfo(pTokenId);
-        if (accountInfo.amountB0 >= 0) {
+        if (amountB0 < 0) removeAmount += (-amountB0).itou();
+        if (removeAmount > 0)
             pool.removeMargin(
                 address(tokenB0),
                 removeAmount,
                 new IPool.OracleSignature[](0)
             );
-        } else {
-            pool.removeMargin(
-                address(tokenB0),
-                removeAmount + (-accountInfo.amountB0).itou(),
-                new IPool.OracleSignature[](0)
-            );
-        }
+
         // burt share token
         _burn(user, amountShare);
 
         // transfer out B0
-        tokenB0.balanceOf(address(this)).log("transfert BUSD");
         tokenB0.transfer(user, tokenB0.balanceOf(address(this)));
 
         emit InstantRedeem(user, block.timestamp, amountShare);
@@ -333,11 +321,19 @@ contract FundImplementation is FundStorage, NameVersion {
         int256 priceLimit
     ) external _onlyAdmin_ {
         if (isAdd) {
-            pool.removeMargin(
-                address(tokenB0),
-                amount,
-                new IPool.OracleSignature[](0)
-            );
+            uint256 tokenId = getPtokenId(address(this));
+            AccountInfo memory accountInfo = getAccountInfo(tokenId);
+            PositionInfo memory positionInfo = getPositionInfo(tokenId);
+            int256 amountB0 = accountInfo.amountB0 + positionInfo.accFunding;
+            uint256 removeAmount = amountB0 >= 0
+                ? amount
+                : amount + (-amountB0).itou();
+            if (removeAmount > 0)
+                pool.removeMargin(
+                    address(tokenB0),
+                    removeAmount,
+                    new IPool.OracleSignature[](0)
+                );
             (, uint256 bnbAmount) = swapper.swapExactB0ForETH(amount);
             staker.deposit{value: bnbAmount}();
         } else {
@@ -382,18 +378,18 @@ contract FundImplementation is FundStorage, NameVersion {
     function getPtokenId(address account)
         internal
         view
-        returns (uint256 pTokenId)
+        returns (uint256 tokenId)
     {
-        pTokenId = ILensDToken(lensPool.pToken()).getTokenIdOf(account);
+        tokenId = ILensDToken(lensPool.pToken()).getTokenIdOf(account);
     }
 
-    function getAccountInfo(uint256 pTokenId)
+    function getAccountInfo(uint256 tokenId)
         internal
         view
         returns (AccountInfo memory accountInfo)
     {
-        if (pTokenId != 0) {
-            ILensPool.PoolTdInfo memory tmp = lensPool.tdInfos(pTokenId);
+        if (tokenId != 0) {
+            ILensPool.PoolTdInfo memory tmp = lensPool.tdInfos(tokenId);
             accountInfo.amountB0 = tmp.amountB0;
             accountInfo.vaultLiquidity = ILensVault(tmp.vault)
                 .getVaultLiquidity()
@@ -401,14 +397,14 @@ contract FundImplementation is FundStorage, NameVersion {
         }
     }
 
-    function getPositionInfo(uint256 pTokenId)
+    function getPositionInfo(uint256 tokenId)
         internal
         view
         returns (PositionInfo memory positionInfo)
     {
-        if (pTokenId != 0) {
+        if (tokenId != 0) {
             ILensSymbol s = ILensSymbol(symbolAddress);
-            ILensSymbol.Position memory p = s.positions(pTokenId);
+            ILensSymbol.Position memory p = s.positions(tokenId);
 
             positionInfo.symbol = s.symbol();
             positionInfo.volume = p.volume;
@@ -473,37 +469,26 @@ contract FundImplementation is FundStorage, NameVersion {
         bnbValue = (getPrice() * bnbAmount) / UONE;
     }
 
-
-    function calculatePositionValue(uint256 pTokenId, bool isDeposit)
-        internal
-        view
-        returns (int256)
-    {
-        AccountInfo memory accountInfo = getAccountInfo(pTokenId);
-        PositionInfo memory positionInfo = getPositionInfo(pTokenId);
-
-        int256 positionValue = accountInfo.amountB0 +
-            accountInfo.vaultLiquidity;
-        positionValue += positionInfo.accFunding;
-        if (
-            (positionInfo.dpmmPnl > positionInfo.indexPnl && isDeposit) ||
-            (positionInfo.dpmmPnl < positionInfo.indexPnl && !isDeposit)
-        ) {
-            positionValue += positionInfo.dpmmPnl;
-        } else {
-            positionValue += positionInfo.indexPnl;
-        }
-        return positionValue;
-    }
-
     function calculateTotalValue(bool isDeposit)
         public
         view
         returns (int256 totalValue, int256 shareValue)
     {
         uint256 tokenId = getPtokenId(address(this));
-        if (tokenId > 0) {
-            int256 positionValue = calculatePositionValue(tokenId, isDeposit);
+        if (tokenId != 0) {
+            AccountInfo memory accountInfo = getAccountInfo(tokenId);
+            PositionInfo memory positionInfo = getPositionInfo(tokenId);
+            int256 positionValue = accountInfo.amountB0 +
+                accountInfo.vaultLiquidity +
+                positionInfo.accFunding;
+            if (
+                (positionInfo.dpmmPnl > positionInfo.indexPnl && isDeposit) ||
+                (positionInfo.dpmmPnl < positionInfo.indexPnl && !isDeposit)
+            ) {
+                positionValue += positionInfo.dpmmPnl;
+            } else {
+                positionValue += positionInfo.indexPnl;
+            }
             (, uint256 bnbValue) = getStakingInfo();
             totalValue = positionValue + bnbValue.utoi();
         } else {
@@ -533,11 +518,7 @@ contract FundImplementation is FundStorage, NameVersion {
             );
         }
     }
-
-
 }
-
-//ILensSymbol symbol = ILensSymbol(symbols[i]);
 
 interface ILensPool {
     struct PoolLpInfo {

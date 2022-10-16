@@ -76,7 +76,7 @@ contract StakeStader is IStaker, NameVersion {
         withdrawlRequestUser[withdrawlRequestNum] = user;
     }
 
-    function claimWithdraw(address user, uint256 id) external onlyFund {
+    function claimWithdraw(address user) external onlyFund {
         uint256 requestId = withdrawalRequestId[user];
         require(requestId > 0, "claimWithdraw: invalid request");
 
