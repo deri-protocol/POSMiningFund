@@ -27,7 +27,7 @@ abstract contract FundStorage is ERC20, Admin {
 
     uint256 public pendingShare;
 
-    mapping(address => RedeemRequest[]) public userRedeemRequests;
+    mapping(address => RedeemRequest) public userRedeemRequests;
 
     struct RedeemRequest {
         uint256 id;
