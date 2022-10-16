@@ -21,13 +21,11 @@ contract StakeStader is IStaker, NameVersion {
 
     address public fund;
 
-    mapping(address => uint256[]) public userWithdrawalRequestId;
+    uint256 public withdrawlRequestNum;
 
-    //    struct WithdrawalRequest {
-    //        uint256 uuid;
-    //        uint256 amountInBnbX;
-    //        uint256 startTime;
-    //    }
+    mapping(address => uint256) public withdrawalRequestId;
+
+    mapping(uint256 => address) public withdrawlRequestUser;
 
     constructor(
         address source_,
@@ -73,29 +71,33 @@ contract StakeStader is IStaker, NameVersion {
 
     function requestWithdraw(address user, uint256 amount) external onlyFund {
         source.requestWithdraw(amount);
-        IStaderSource.WithdrawalRequest[] memory withdrawlRequest = source
-            .getUserWithdrawalRequests(address(this));
-        userWithdrawalRequestId[user].push(withdrawlRequest.length - 1);
+        withdrawlRequestNum ++;
+        withdrawalRequestId[user] = withdrawlRequestNum;
+        withdrawlRequestUser[withdrawlRequestNum] = user;
     }
 
     function claimWithdraw(address user, uint256 id) external onlyFund {
-        uint256[] storage userIds = userWithdrawalRequestId[user];
-        uint256 i;
-        bool isValid;
-        for (i = 0; i < userIds.length; i++) {
-            if (userIds[i] == id) {
-                isValid = true;
-                break;
-            }
+        uint256 requestId = withdrawalRequestId[user];
+        require(requestId > 0, "claimWithdraw: invalid request");
+
+        address lastUser = withdrawlRequestUser[withdrawlRequestNum];
+        withdrawalRequestId[user] = 0;
+        withdrawlRequestUser[withdrawlRequestNum] = address(0);
+
+        if (user != lastUser) {
+            withdrawalRequestId[lastUser] = requestId;
+            withdrawlRequestUser[requestId] = lastUser;
         }
-        require(isValid, "claimWithdraw: invalid id");
-        userIds[i] = userIds[userIds.length - 1];
-        userIds.pop();
-        source.claimWithdraw(id);
-        (bool success, ) = payable(msg.sender).call{
-            value: address(this).balance
-        }("");
-        require(success, "StakeStader.claimWithdraw: fail");
+        withdrawlRequestNum --;
+
+        source.claimWithdraw(requestId - 1);
+        (bool success, ) = payable(msg.sender).call{value:address(this).balance}("");
+        require(success, 'claimWithdraw: fail');
+    }
+
+    function getUserRequestStatus(address user) external view returns (bool, uint256) {
+        uint256 requestId = withdrawalRequestId[user];
+        return source.getUserRequestStatus(address(this), requestId - 1);
     }
 
     function swapStakerBnbToB0(uint256 amountInStakerBnb)

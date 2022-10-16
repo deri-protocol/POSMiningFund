@@ -18,7 +18,7 @@ interface IStaker {
 
     function requestWithdraw(address, uint256) external;
 
-    function claimWithdraw(address, uint256) external;
+    function claimWithdraw(address) external;
 
     function stakerBnb() external returns (IERC20);
 

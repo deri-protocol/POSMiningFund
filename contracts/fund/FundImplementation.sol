@@ -127,6 +127,12 @@ contract FundImplementation is FundStorage, NameVersion {
             symbolId
         );
         minTradeVolume = ILensSymbol(symbolAddress).minTradeVolume();
+
+    }
+
+    function approveInvest() external _onlyAdmin_ {
+        _approveSwapper(address(swapper), address(tokenB0));
+        _approvePool(address(pool), address(tokenB0));
     }
 
     function invest(uint256 amount, int256 priceLimit) external {
@@ -141,14 +147,11 @@ contract FundImplementation is FundStorage, NameVersion {
 
         // B0 swap and stake
         uint256 stakingAmount = (amount * stakeRatio) / UONE;
-        _approveSwapper(address(tokenB0));
         (, uint256 bnbAmount) = swapper.swapExactB0ForETH(stakingAmount);
-        bnbAmount.log("bnbAmount");
         staker.deposit{value: bnbAmount}();
 
         // B0 add margin and short
         uint256 addAmount = tokenB0.balanceOf(address(this));
-        _approvePool(address(pool), address(tokenB0));
         pool.addMargin(
             address(tokenB0),
             addAmount,
@@ -270,7 +273,7 @@ contract FundImplementation is FundStorage, NameVersion {
             value: address(this).balance
         }();
 
-        // burt share token
+        // burn share token
         _burn(user, redeemRequest.share);
 
         // delete request record from storage
@@ -366,6 +369,26 @@ contract FundImplementation is FundStorage, NameVersion {
                 priceLimit,
                 new IPool.OracleSignature[](0)
             );
+        }
+    }
+
+    function _approveSwapper(address _swapper, address asset) internal {
+        uint256 allowance = IERC20(asset).allowance(
+            address(this),
+            address(_swapper)
+        );
+        if (allowance != type(uint256).max) {
+            if (allowance != 0) {
+                IERC20(asset).safeApprove(_swapper, 0);
+            }
+            IERC20(asset).safeApprove(_swapper, type(uint256).max);
+        }
+    }
+
+    function _approvePool(address _pool, address asset) internal {
+        uint256 allowance = IERC20(asset).allowance(address(this), _pool);
+        if (allowance == 0) {
+            IERC20(asset).safeApprove(address(_pool), type(uint256).max);
         }
     }
 
@@ -525,26 +548,10 @@ contract FundImplementation is FundStorage, NameVersion {
             : ONE;
     }
 
-    function _approveSwapper(address underlying) internal {
-        uint256 allowance = IERC20(underlying).allowance(
-            address(this),
-            address(swapper)
-        );
-        if (allowance != type(uint256).max) {
-            if (allowance != 0) {
-                IERC20(underlying).safeApprove(address(swapper), 0);
-            }
-            IERC20(underlying).safeApprove(address(swapper), type(uint256).max);
-        }
-    }
 
-    function _approvePool(address _pool, address asset) internal {
-        uint256 allowance = IERC20(asset).allowance(address(this), _pool);
-        if (allowance == 0) {
-            IERC20(asset).safeApprove(address(_pool), type(uint256).max);
-        }
-    }
 }
+
+//ILensSymbol symbol = ILensSymbol(symbols[i]);
 
 interface ILensPool {
     struct PoolLpInfo {
