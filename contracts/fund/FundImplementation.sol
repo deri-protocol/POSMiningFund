@@ -3,13 +3,12 @@
 pragma solidity >=0.8.0 <0.9.0;
 
 import "../utils/NameVersion.sol";
-import "../token/IERC20.sol";
 import "../library/SafeMath.sol";
-import "../library/DpmmLinearPricing.sol";
 import "../library/SafeERC20.sol";
+import "../library/DpmmLinearPricing.sol";
+import "../token/IERC20.sol";
 import "../swapper/ISwapper.sol";
 import "../pool/IPool.sol";
-import "../utils/NameVersion.sol";
 import "../stake/IStaker.sol";
 import "./FundStorage.sol";
 import "../test/Log.sol";
@@ -241,10 +240,8 @@ contract FundImplementation is FundStorage, NameVersion {
         PositionInfo memory positionInfo = getPositionInfo(tokenId);
         int256 positionValue = accountInfo.amountB0 +
             accountInfo.vaultLiquidity +
-            positionInfo.accFunding;
-        positionValue += positionInfo.dpmmPnl > positionInfo.indexPnl
-            ? positionInfo.indexPnl
-            : positionInfo.dpmmPnl;
+            positionInfo.accFunding +
+            positionInfo.dpmmPnl.min(positionInfo.indexPnl);
         int256 amountB0 = accountInfo.amountB0 + positionInfo.accFunding;
         uint256 removeAmount = (positionValue.itou() * redeemRequest.share) /
             totalSupply();
@@ -291,10 +288,8 @@ contract FundImplementation is FundStorage, NameVersion {
         PositionInfo memory positionInfo = getPositionInfo(tokenId);
         int256 positionValue = accountInfo.amountB0 +
             accountInfo.vaultLiquidity +
-            positionInfo.accFunding;
-        positionValue += positionInfo.dpmmPnl > positionInfo.indexPnl
-            ? positionInfo.indexPnl
-            : positionInfo.dpmmPnl;
+            positionInfo.accFunding +
+            positionInfo.dpmmPnl.min(positionInfo.indexPnl);
         int256 amountB0 = accountInfo.amountB0 + positionInfo.accFunding;
         uint256 removeAmount = (positionValue.itou() * amountShare) /
             totalSupply();
