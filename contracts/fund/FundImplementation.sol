@@ -142,9 +142,7 @@ contract FundImplementation is FundStorage, NameVersion {
         tokenB0.safeTransferFrom(user, address(this), amount);
 
         // calculate shareValue before invest
-        (int256 preTotalValue, int256 preShareValue) = calculateTotalValue(
-            true
-        );
+        (int256 preTotalValue, int256 preShareValue, , ) = calculateTotalValue(true);
 
         // B0 swap and stake
         uint256 stakingAmount = (amount * stakeRatio) / UONE;
@@ -162,7 +160,8 @@ contract FundImplementation is FundStorage, NameVersion {
         balanceBnbDiff(priceLimit);
 
         // calculate shareValue after invest and mint
-        (int256 curTotalValue, ) = calculateTotalValue(true);
+        (int256 curTotalValue, , , ) = calculateTotalValue(true);
+
 
         uint256 mintShare = (((curTotalValue - preTotalValue) * ONE) /
             preShareValue).itou();
@@ -232,14 +231,7 @@ contract FundImplementation is FundStorage, NameVersion {
         balanceBnbDiff(priceLimit);
 
         // calculate position value
-        uint256 tokenId = getPtokenId(address(this));
-        AccountInfo memory accountInfo = getAccountInfo(tokenId);
-        PositionInfo memory positionInfo = getPositionInfo(tokenId);
-        int256 positionValue = accountInfo.amountB0 +
-            accountInfo.vaultLiquidity +
-            positionInfo.accFunding +
-            positionInfo.dpmmPnl.min(positionInfo.indexPnl);
-        int256 amountB0 = accountInfo.amountB0 + positionInfo.accFunding;
+        (, , int256 positionValue, int256 amountB0) = calculateTotalValue(false);
         uint256 removeAmount = (positionValue.itou() * redeemRequest.share) /
             totalSupply();
         if (amountB0 < 0) removeAmount += (-amountB0).itou();
@@ -280,14 +272,7 @@ contract FundImplementation is FundStorage, NameVersion {
         balanceBnbDiff(priceLimit);
 
         // calculate position value
-        uint256 tokenId = getPtokenId(address(this));
-        AccountInfo memory accountInfo = getAccountInfo(tokenId);
-        PositionInfo memory positionInfo = getPositionInfo(tokenId);
-        int256 positionValue = accountInfo.amountB0 +
-            accountInfo.vaultLiquidity +
-            positionInfo.accFunding +
-            positionInfo.dpmmPnl.min(positionInfo.indexPnl);
-        int256 amountB0 = accountInfo.amountB0 + positionInfo.accFunding;
+        (, , int256 positionValue, int256 amountB0) = calculateTotalValue(false);
         uint256 removeAmount = (positionValue.itou() * amountShare) /
             totalSupply();
         if (amountB0 < 0) removeAmount += (-amountB0).itou();
@@ -464,25 +449,22 @@ contract FundImplementation is FundStorage, NameVersion {
     function calculateTotalValue(bool isDeposit)
         public
         view
-        returns (int256 totalValue, int256 shareValue)
+        returns (int256 totalValue, int256 shareValue, int256 positionValue, int256 amountB0)
     {
         uint256 tokenId = getPtokenId(address(this));
         if (tokenId != 0) {
             AccountInfo memory accountInfo = getAccountInfo(tokenId);
             PositionInfo memory positionInfo = getPositionInfo(tokenId);
-            int256 positionValue = accountInfo.amountB0 +
+            positionValue = accountInfo.amountB0 +
                 accountInfo.vaultLiquidity +
                 positionInfo.accFunding;
-            if (
-                (positionInfo.dpmmPnl > positionInfo.indexPnl && isDeposit) ||
-                (positionInfo.dpmmPnl < positionInfo.indexPnl && !isDeposit)
-            ) {
-                positionValue += positionInfo.dpmmPnl;
-            } else {
-                positionValue += positionInfo.indexPnl;
-            }
+            positionValue += isDeposit
+               ? SafeMath.max(positionInfo.dpmmPnl, positionInfo.indexPnl)
+               : SafeMath.min(positionInfo.dpmmPnl, positionInfo.indexPnl);
+
             (, uint256 bnbValue) = getStakingInfo();
             totalValue = positionValue + bnbValue.utoi();
+            amountB0 = accountInfo.amountB0 + positionInfo.accFunding;
         } else {
             (, uint256 bnbValue) = getStakingInfo();
             totalValue = bnbValue.utoi();
@@ -490,6 +472,8 @@ contract FundImplementation is FundStorage, NameVersion {
         shareValue = totalSupply() > 0
             ? (totalValue * ONE) / totalSupply().utoi()
             : ONE;
+
+
     }
 
     function balanceBnbDiff(int256 priceLimit) public returns (int256 diff) {
