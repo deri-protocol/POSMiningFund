@@ -33,8 +33,7 @@ contract FundImplementation is FundStorage, NameVersion {
         uint256 indexed timestamp,
         uint256 redeemShareAmount,
         uint256 redeemBnbx,
-        uint256 redeemBnb,
-        uint256 redeemId
+        uint256 redeemBnb
     );
 
     event ClaimRedeem(
@@ -136,7 +135,7 @@ contract FundImplementation is FundStorage, NameVersion {
     function invest(uint256 amount, int256 priceLimit) external {
         address user = msg.sender;
         require(
-            userRedeemRequests[user].id == 0,
+            userRedeemRequests[user].share > 0,
             "invest: ongoing claim request"
         );
         // transfer in B0
@@ -182,7 +181,7 @@ contract FundImplementation is FundStorage, NameVersion {
     function requestRedeem() external {
         address user = msg.sender;
         require(
-            userRedeemRequests[user].id == 0,
+            userRedeemRequests[user].share > 0,
             "requestRedeem: ongoing claim request"
         );
 
@@ -201,7 +200,6 @@ contract FundImplementation is FundStorage, NameVersion {
         uint256 amountInBnb = staker.convertToBnb(amountInStakerBnb);
 
         userRedeemRequests[user] = RedeemRequest({
-            id: ++redeemId,
             amountInBnb: amountInBnb,
             amountInStakerBnb: amountInStakerBnb,
             share: amountShare,
@@ -218,15 +216,14 @@ contract FundImplementation is FundStorage, NameVersion {
             block.timestamp,
             amountShare,
             amountInStakerBnb,
-            amountInBnb,
-            redeemId
+            amountInBnb
         );
     }
 
     function claimRedeem(int256 priceLimit) external {
         address user = msg.sender;
         RedeemRequest storage redeemRequest = userRedeemRequests[user];
-        require(redeemRequest.id > 0, "claimRedeem: no redeem record");
+        require(redeemRequest.share > 0, "claimRedeem: no redeem record");
 
         pendingBnb -= redeemRequest.amountInBnb;
         pendingShare -= redeemRequest.share;

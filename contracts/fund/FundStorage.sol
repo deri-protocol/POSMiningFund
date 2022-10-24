@@ -30,7 +30,6 @@ abstract contract FundStorage is ERC20, Admin {
     mapping(address => RedeemRequest) public userRedeemRequests;
 
     struct RedeemRequest {
-        uint256 id;
         uint256 amountInBnb;
         uint256 amountInStakerBnb;
         uint256 share;
