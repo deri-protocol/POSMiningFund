@@ -2,6 +2,7 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
+
 import "../utils/NameVersion.sol";
 import "../library/SafeMath.sol";
 import "../library/SafeERC20.sol";
@@ -135,9 +136,10 @@ contract FundImplementation is FundStorage, NameVersion {
     function invest(uint256 amount, int256 priceLimit) external {
         address user = msg.sender;
         require(
-            userRedeemRequests[user].share > 0,
+            userRedeemRequests[user].share == 0,
             "invest: ongoing claim request"
         );
+        require(amount > 0, "invest: zero amount");
         // transfer in B0
         tokenB0.safeTransferFrom(user, address(this), amount);
 
@@ -180,7 +182,7 @@ contract FundImplementation is FundStorage, NameVersion {
     function requestRedeem() external {
         address user = msg.sender;
         require(
-            userRedeemRequests[user].share > 0,
+            userRedeemRequests[user].share == 0,
             "requestRedeem: ongoing claim request"
         );
 
@@ -249,7 +251,7 @@ contract FundImplementation is FundStorage, NameVersion {
         }();
 
         // burn share token
-        _burn(user, redeemRequest.share);
+        _burn(address(this), redeemRequest.share);
 
         // transfer out B0
         tokenB0.transfer(user, tokenB0.balanceOf(address(this)));
@@ -259,8 +261,14 @@ contract FundImplementation is FundStorage, NameVersion {
 
     function instantRedeem(int256 priceLimit) external {
         address user = msg.sender;
+
         uint256 amountShare = balanceOf(user);
         require(amountShare > 0, "requestRedeem: zero balance");
+        IERC20(address(this)).safeTransferFrom(
+            user,
+            address(this),
+            amountShare
+        );
 
         // B0 swap and stake
         uint256 ratio = (amountShare * UONE) / (totalSupply() - pendingShare);
@@ -284,7 +292,7 @@ contract FundImplementation is FundStorage, NameVersion {
             );
 
         // burt share token
-        _burn(user, amountShare);
+        _burn(address(this), amountShare);
 
         // transfer out B0
         tokenB0.transfer(user, tokenB0.balanceOf(address(this)));
@@ -296,7 +304,8 @@ contract FundImplementation is FundStorage, NameVersion {
         bool isAdd,
         uint256 amount,
         int256 priceLimit
-    ) external _onlyAdmin_ {
+    ) external {
+        require(hasRole(KEEPER_ROLE, msg.sender), "rebalance: keepers only");
         if (isAdd) {
             uint256 tokenId = getPtokenId(address(this));
             AccountInfo memory accountInfo = getAccountInfo(tokenId);
@@ -472,8 +481,6 @@ contract FundImplementation is FundStorage, NameVersion {
         shareValue = totalSupply() > 0
             ? (totalValue * ONE) / totalSupply().utoi()
             : ONE;
-
-
     }
 
     function balanceBnbDiff(int256 priceLimit) public returns (int256 diff) {
