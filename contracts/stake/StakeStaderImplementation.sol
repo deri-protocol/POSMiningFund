@@ -31,12 +31,14 @@ contract StakeStaderImplementation is StakeStaderStorage, IStaker, NameVersion {
     ) NameVersion("StakeStaderImplementation", "1.0.0") {
         source = IStaderSource(source_);
         stakerBnb = IERC20(stakerBnb_);
-        stakerBnb.approve(source_, type(uint256).max);
         swapper = ISwapper(swapper_);
         tokenB0 = IERC20(tokenB0_);
-
-        _approveSwapper(address(stakerBnb));
         fund = _fund;
+    }
+
+    function approve_() external _onlyAdmin_ {
+        stakerBnb.approve(address(source), type(uint256).max);
+        _approveSwapper(address(stakerBnb));
     }
 
     modifier onlyFund() {

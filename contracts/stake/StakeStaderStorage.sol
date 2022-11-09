@@ -14,4 +14,5 @@ abstract contract StakeStaderStorage is Admin {
     mapping(address => uint256) public withdrawalRequestId;
 
     mapping(uint256 => address) public withdrawlRequestUser;
+
 }
