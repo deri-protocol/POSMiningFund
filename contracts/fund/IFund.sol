@@ -9,4 +9,28 @@ interface IFund is INameVersion, IAdmin {
     function implementation() external view returns (address);
 
     function setImplementation(address newImplementation) external;
+
+    function invest(uint256 amount, int256 priceLimit) external;
+
+    function requestRedeem() external;
+
+    function claimRedeem(int256 priceLimit) external;
+
+    function instantRedeem(int256 priceLimit) external;
+
+    function rebalance(
+        bool isAdd,
+        uint256 amount,
+        int256 priceLimit
+    ) external;
+
+    function calculateTotalValue(bool isDeposit)
+        external
+        view
+        returns (
+            int256,
+            int256,
+            int256,
+            int256
+        );
 }

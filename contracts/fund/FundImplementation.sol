@@ -2,7 +2,6 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-
 import "../utils/NameVersion.sol";
 import "../library/SafeMath.sol";
 import "../library/SafeERC20.sol";
@@ -144,7 +143,9 @@ contract FundImplementation is FundStorage, NameVersion {
         tokenB0.safeTransferFrom(user, address(this), amount);
 
         // calculate shareValue before invest
-        (int256 preTotalValue, int256 preShareValue, , ) = calculateTotalValue(true);
+        (int256 preTotalValue, int256 preShareValue, , ) = calculateTotalValue(
+            true
+        );
 
         // B0 swap and stake
         uint256 stakingAmount = (amount * stakeRatio) / UONE;
@@ -163,7 +164,6 @@ contract FundImplementation is FundStorage, NameVersion {
 
         // calculate shareValue after invest and mint
         (int256 curTotalValue, , , ) = calculateTotalValue(true);
-
 
         uint256 mintShare = (((curTotalValue - preTotalValue) * ONE) /
             preShareValue).itou();
@@ -233,7 +233,9 @@ contract FundImplementation is FundStorage, NameVersion {
         balanceBnbDiff(priceLimit);
 
         // calculate position value
-        (, , int256 positionValue, int256 amountB0) = calculateTotalValue(false);
+        (, , int256 positionValue, int256 amountB0) = calculateTotalValue(
+            false
+        );
         uint256 removeAmount = (positionValue.itou() * redeemRequest.share) /
             totalSupply();
         if (amountB0 < 0) removeAmount += (-amountB0).itou();
@@ -280,7 +282,9 @@ contract FundImplementation is FundStorage, NameVersion {
         balanceBnbDiff(priceLimit);
 
         // calculate position value
-        (, , int256 positionValue, int256 amountB0) = calculateTotalValue(false);
+        (, , int256 positionValue, int256 amountB0) = calculateTotalValue(
+            false
+        );
         uint256 removeAmount = (positionValue.itou() * amountShare) /
             totalSupply();
         if (amountB0 < 0) removeAmount += (-amountB0).itou();
@@ -458,18 +462,24 @@ contract FundImplementation is FundStorage, NameVersion {
     function calculateTotalValue(bool isDeposit)
         public
         view
-        returns (int256 totalValue, int256 shareValue, int256 positionValue, int256 amountB0)
+        returns (
+            int256 totalValue,
+            int256 shareValue,
+            int256 positionValue,
+            int256 amountB0
+        )
     {
         uint256 tokenId = getPtokenId(address(this));
         if (tokenId != 0) {
             AccountInfo memory accountInfo = getAccountInfo(tokenId);
             PositionInfo memory positionInfo = getPositionInfo(tokenId);
-            positionValue = accountInfo.amountB0 +
+            positionValue =
+                accountInfo.amountB0 +
                 accountInfo.vaultLiquidity +
                 positionInfo.accFunding;
             positionValue += isDeposit
-               ? SafeMath.max(positionInfo.dpmmPnl, positionInfo.indexPnl)
-               : SafeMath.min(positionInfo.dpmmPnl, positionInfo.indexPnl);
+                ? SafeMath.max(positionInfo.dpmmPnl, positionInfo.indexPnl)
+                : SafeMath.min(positionInfo.dpmmPnl, positionInfo.indexPnl);
 
             (, uint256 bnbValue) = getStakingInfo();
             totalValue = positionValue + bnbValue.utoi();

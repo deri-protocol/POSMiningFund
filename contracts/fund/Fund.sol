@@ -10,7 +10,7 @@ contract Fund is FundStorage {
         require(
             IFund(newImplementation).nameId() ==
                 keccak256(abi.encodePacked("FundImplementation")),
-            "Fund.setImplementation: not pool implementation"
+            "Fund.setImplementation: not fund implementation"
         );
         implementation = newImplementation;
         emit NewImplementation(newImplementation);

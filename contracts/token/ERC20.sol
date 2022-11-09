@@ -5,6 +5,7 @@ pragma solidity ^0.8.0;
 
 import "./IERC20.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
+
 //import "../utils/Context.sol";
 
 /**
@@ -275,7 +276,6 @@ contract ERC20 is Context, IERC20 {
         _balances[to] += amount;
 
         emit Transfer(from, to, amount);
-
     }
 
     /** @dev Creates `amount` tokens and assigns them to `account`, increasing
@@ -293,7 +293,6 @@ contract ERC20 is Context, IERC20 {
         _totalSupply += amount;
         _balances[account] += amount;
         emit Transfer(address(0), account, amount);
-
     }
 
     /**
@@ -318,7 +317,6 @@ contract ERC20 is Context, IERC20 {
         _totalSupply -= amount;
 
         emit Transfer(account, address(0), amount);
-
     }
 
     /**
@@ -370,5 +368,4 @@ contract ERC20 is Context, IERC20 {
             }
         }
     }
-
 }

@@ -2,8 +2,10 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 import "../token/IERC20.sol";
+import "../utils/INameVersion.sol";
+import "../utils/IAdmin.sol";
 
-interface IStaker {
+interface IStaker is INameVersion, IAdmin {
     function deposit() external payable;
 
     function convertToBnb(uint256 amountInStakerBnb)
