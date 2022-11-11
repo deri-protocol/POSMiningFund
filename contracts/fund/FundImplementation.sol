@@ -248,9 +248,7 @@ contract FundImplementation is FundStorage, NameVersion {
 
         // claim BNB, then swap BNB to B0
         staker.claimWithdraw(user);
-        (uint256 resultB0, ) = swapper.swapExactETHForB0{
-            value: address(this).balance
-        }();
+        swapper.swapExactETHForB0{value: address(this).balance}();
 
         // burn share token
         _burn(address(this), redeemRequest.share);
@@ -276,7 +274,7 @@ contract FundImplementation is FundStorage, NameVersion {
         uint256 ratio = (amountShare * UONE) / (totalSupply() - pendingShare);
         uint256 amountInStakerBnb = (stakerBnb.balanceOf(address(staker)) *
             ratio) / UONE;
-        uint256 resultB0 = staker.swapStakerBnbToB0(amountInStakerBnb);
+        staker.swapStakerBnbToB0(amountInStakerBnb);
 
         // close bnb position
         balanceBnbDiff(priceLimit);

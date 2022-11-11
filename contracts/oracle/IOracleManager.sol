@@ -2,11 +2,10 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-import '../utils/INameVersion.sol';
-import '../utils/IAdmin.sol';
+import "../utils/INameVersion.sol";
+import "../utils/IAdmin.sol";
 
 interface IOracleManager is INameVersion, IAdmin {
-
     event NewOracle(bytes32 indexed symbolId, address indexed oracle);
 
     function getOracle(bytes32 symbolId) external view returns (address);
@@ -27,9 +26,8 @@ interface IOracleManager is INameVersion, IAdmin {
         bytes32 symbolId,
         uint256 timestamp_,
         uint256 value_,
-        uint8   v_,
+        uint8 v_,
         bytes32 r_,
         bytes32 s_
     ) external returns (bool);
-
 }

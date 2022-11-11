@@ -24,8 +24,6 @@ abstract contract FundStorage is ERC20, Admin, AccessControl {
 
     address public implementation;
 
-    uint256 public redeemId;
-
     uint256 public pendingBnb;
 
     uint256 public pendingShare;

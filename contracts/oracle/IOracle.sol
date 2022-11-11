@@ -2,10 +2,9 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-import '../utils/INameVersion.sol';
+import "../utils/INameVersion.sol";
 
 interface IOracle is INameVersion {
-
     function symbol() external view returns (string memory);
 
     function symbolId() external view returns (bytes32);
@@ -15,5 +14,4 @@ interface IOracle is INameVersion {
     function value() external view returns (uint256);
 
     function getValue() external view returns (uint256);
-
 }

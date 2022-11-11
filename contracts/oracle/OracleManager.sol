@@ -2,18 +2,17 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-import './IOracle.sol';
-import './IOracleOffChain.sol';
-import './IOracleManager.sol';
-import '../utils/NameVersion.sol';
-import '../utils/Admin.sol';
+import "./IOracle.sol";
+import "./IOracleOffChain.sol";
+import "./IOracleManager.sol";
+import "../utils/NameVersion.sol";
+import "../utils/Admin.sol";
 
 contract OracleManager is IOracleManager, NameVersion, Admin {
-
     // symbolId => oracleAddress
-    mapping (bytes32 => address) _oracles;
+    mapping(bytes32 => address) _oracles;
 
-    constructor () NameVersion('OracleManager', '3.0.1') {}
+    constructor() NameVersion("OracleManager", "3.0.1") {}
 
     function getOracle(bytes32 symbolId) external view returns (address) {
         return _oracles[symbolId];
@@ -43,13 +42,13 @@ contract OracleManager is IOracleManager, NameVersion, Admin {
 
     function value(bytes32 symbolId) public view returns (uint256) {
         address oracle = _oracles[symbolId];
-        require(oracle != address(0), 'OracleManager.value: no oracle');
+        require(oracle != address(0), "OracleManager.value: no oracle");
         return IOracle(oracle).value();
     }
 
     function getValue(bytes32 symbolId) public view returns (uint256) {
         address oracle = _oracles[symbolId];
-        require(oracle != address(0), 'OracleManager.getValue: no oracle');
+        require(oracle != address(0), "OracleManager.getValue: no oracle");
         return IOracle(oracle).getValue();
     }
 
@@ -57,13 +56,13 @@ contract OracleManager is IOracleManager, NameVersion, Admin {
         bytes32 symbolId,
         uint256 timestamp_,
         uint256 value_,
-        uint8   v_,
+        uint8 v_,
         bytes32 r_,
         bytes32 s_
     ) public returns (bool) {
         address oracle = _oracles[symbolId];
-        require(oracle != address(0), 'OracleManager.updateValue: no oracle');
-        return IOracleOffChain(oracle).updateValue(timestamp_, value_, v_, r_, s_);
+        require(oracle != address(0), "OracleManager.updateValue: no oracle");
+        return
+            IOracleOffChain(oracle).updateValue(timestamp_, value_, v_, r_, s_);
     }
-
 }
