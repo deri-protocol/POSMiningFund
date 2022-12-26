@@ -10,13 +10,13 @@ interface IFund is INameVersion, IAdmin {
 
     function setImplementation(address newImplementation) external;
 
-    function invest(uint256 amount, int256 priceLimit) external;
+    function invest(address account, uint256 amount, int256 priceLimit) external;
 
     function requestRedeem() external;
 
-    function claimRedeem(int256 priceLimit) external;
+    function claimRedeem(address account, int256 priceLimit) external;
 
-    function instantRedeem(int256 priceLimit) external;
+    function instantRedeem(address account, int256 priceLimit) external;
 
     function rebalance(
         bool isAdd,

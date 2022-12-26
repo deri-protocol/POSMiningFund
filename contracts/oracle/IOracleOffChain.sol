@@ -2,9 +2,10 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-import "./IOracle.sol";
+import './IOracle.sol';
 
 interface IOracleOffChain is IOracle {
+
     event NewValue(uint256 indexed timestamp, uint256 indexed value);
 
     function signer() external view returns (address);
@@ -18,4 +19,5 @@ interface IOracleOffChain is IOracle {
         bytes32 r,
         bytes32 s
     ) external returns (bool);
+
 }
