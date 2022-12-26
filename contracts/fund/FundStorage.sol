@@ -37,6 +37,8 @@ abstract contract FundStorage is ERC20, Admin, AccessControl {
         uint256 startTime;
     }
 
+    mapping(address => bool) public isRouter;
+
     constructor() ERC20("Fund LP", "FLP") {
         _setupRole(KEEPER_ROLE, msg.sender);
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);

@@ -132,8 +132,10 @@ contract FundImplementation is FundStorage, NameVersion {
         _approvePool(address(pool), address(tokenB0));
     }
 
-    function invest(uint256 amount, int256 priceLimit) external {
-        address user = msg.sender;
+
+    function invest(address user, uint256 amount, int256 priceLimit) external {
+        require(isRouter[msg.sender], "fund: only router");
+
         require(
             userRedeemRequests[user].share == 0,
             "invest: ongoing claim request"
@@ -221,8 +223,10 @@ contract FundImplementation is FundStorage, NameVersion {
         );
     }
 
-    function claimRedeem(int256 priceLimit) external {
-        address user = msg.sender;
+
+    function claimRedeem(address user, int256 priceLimit) external {
+        require(isRouter[msg.sender], "fund: only router");
+
         RedeemRequest storage redeemRequest = userRedeemRequests[user];
         require(redeemRequest.share > 0, "claimRedeem: no redeem record");
 
@@ -259,8 +263,9 @@ contract FundImplementation is FundStorage, NameVersion {
         delete userRedeemRequests[user];
     }
 
-    function instantRedeem(int256 priceLimit) external {
-        address user = msg.sender;
+
+    function instantRedeem(address user, int256 priceLimit) external {
+        require(isRouter[msg.sender], "fund: only router");
 
         uint256 amountShare = balanceOf(user);
         require(amountShare > 0, "requestRedeem: zero balance");
@@ -301,6 +306,8 @@ contract FundImplementation is FundStorage, NameVersion {
 
         emit InstantRedeem(user, block.timestamp, amountShare);
     }
+
+
 
     function rebalance(
         bool isAdd,
@@ -490,6 +497,7 @@ contract FundImplementation is FundStorage, NameVersion {
             ? (totalValue * ONE) / totalSupply().utoi()
             : ONE;
     }
+
 
     function balanceBnbDiff(int256 priceLimit) public returns (int256 diff) {
         uint256 tokenId = getPtokenId(address(this));
