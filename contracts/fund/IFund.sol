@@ -19,6 +19,7 @@ interface IFund is INameVersion, IAdmin {
     function instantRedeem(address account, int256 priceLimit) external;
 
     function rebalance(
+        address account,
         bool isAdd,
         uint256 amount,
         int256 priceLimit

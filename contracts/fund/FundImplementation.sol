@@ -310,11 +310,12 @@ contract FundImplementation is FundStorage, NameVersion {
 
 
     function rebalance(
+        address user,
         bool isAdd,
         uint256 amount,
         int256 priceLimit
     ) external {
-        require(hasRole(KEEPER_ROLE, msg.sender), "rebalance: keepers only");
+        require(hasRole(KEEPER_ROLE, user), "rebalance: keepers only");
         if (isAdd) {
             uint256 tokenId = getPtokenId(address(this));
             AccountInfo memory accountInfo = getAccountInfo(tokenId);

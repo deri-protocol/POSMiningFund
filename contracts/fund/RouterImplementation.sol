@@ -155,7 +155,7 @@ contract RouterImplementation is RouterStorage {
         } else if (actionId == keccak256(abi.encodePacked("instantRedeem"))) {
             fund.instantRedeem(request.account, request.priceLimit);
         } else if (actionId == keccak256(abi.encodePacked("rebalance"))) {
-            fund.rebalance(request.isAdd, request.amount, request.priceLimit);
+            fund.rebalance(request.account, request.isAdd, request.amount, request.priceLimit);
         }
 
         _transferOutETH(request.executionFee, executor);
