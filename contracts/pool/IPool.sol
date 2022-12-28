@@ -40,41 +40,18 @@ interface IPool is INameVersion, IAdmin {
         bytes32 s;
     }
 
-    function addLiquidity(
-        address underlying,
-        uint256 amount,
-        OracleSignature[] memory oracleSignatures
-    ) external payable;
+    function addLiquidity(address underlying, uint256 amount, OracleSignature[] memory oracleSignatures) external payable;
 
-    function removeLiquidity(
-        address underlying,
-        uint256 amount,
-        OracleSignature[] memory oracleSignatures
-    ) external;
+    function removeLiquidity(address underlying, uint256 amount, OracleSignature[] memory oracleSignatures) external;
 
-    function addMargin(
-        address underlying,
-        uint256 amount,
-        OracleSignature[] memory oracleSignatures
-    ) external payable;
+    function addMargin(address account, address underlying, uint256 amount, OracleSignature[] memory oracleSignatures) external payable;
 
-    function removeMargin(
-        address underlying,
-        uint256 amount,
-        OracleSignature[] memory oracleSignatures
-    ) external;
+    function removeMargin(address account, address underlying, uint256 amount, OracleSignature[] memory oracleSignatures) external;
 
-    function trade(
-        string memory symbolName,
-        int256 tradeVolume,
-        int256 priceLimit,
-        OracleSignature[] memory oracleSignatures
-    ) external;
+    function trade(address account, string memory symbolName, int256 tradeVolume, int256 priceLimit) external;
 
-    function liquidate(
-        uint256 pTokenId,
-        OracleSignature[] memory oracleSignatures
-    ) external;
+    function liquidate(uint256 pTokenId, OracleSignature[] memory oracleSignatures) external;
+
 
     struct LpInfo {
         address vault;
