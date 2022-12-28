@@ -157,6 +157,7 @@ contract FundImplementation is FundStorage, NameVersion {
         // B0 add margin and short
         uint256 addAmount = tokenB0.balanceOf(address(this));
         pool.addMargin(
+            address(this),
             address(tokenB0),
             addAmount,
             new IPool.OracleSignature[](0)
@@ -245,6 +246,7 @@ contract FundImplementation is FundStorage, NameVersion {
         if (amountB0 < 0) removeAmount += (-amountB0).itou();
         if (removeAmount > 0)
             pool.removeMargin(
+                address(this),
                 address(tokenB0),
                 removeAmount,
                 new IPool.OracleSignature[](0)
@@ -293,6 +295,7 @@ contract FundImplementation is FundStorage, NameVersion {
         if (amountB0 < 0) removeAmount += (-amountB0).itou();
         if (removeAmount > 0)
             pool.removeMargin(
+                address(this),
                 address(tokenB0),
                 removeAmount,
                 new IPool.OracleSignature[](0)
@@ -315,6 +318,7 @@ contract FundImplementation is FundStorage, NameVersion {
         uint256 amount,
         int256 priceLimit
     ) external {
+        require(isRouter[msg.sender], "fund: only router");
         require(hasRole(KEEPER_ROLE, user), "rebalance: keepers only");
         if (isAdd) {
             uint256 tokenId = getPtokenId(address(this));
@@ -326,6 +330,7 @@ contract FundImplementation is FundStorage, NameVersion {
                 : amount + (-amountB0).itou();
             if (removeAmount > 0)
                 pool.removeMargin(
+                    address(this),
                     address(tokenB0),
                     removeAmount,
                     new IPool.OracleSignature[](0)
@@ -335,6 +340,7 @@ contract FundImplementation is FundStorage, NameVersion {
         } else {
             uint256 resultB0 = staker.swapStakerBnbToB0(amount);
             pool.addMargin(
+                address(this),
                 address(tokenB0),
                 resultB0,
                 new IPool.OracleSignature[](0)
@@ -511,10 +517,10 @@ contract FundImplementation is FundStorage, NameVersion {
             minTradeVolume;
         if (diff != 0) {
             pool.trade(
+                address(this),
                 symbolName,
                 -diff,
-                priceLimit,
-                new IPool.OracleSignature[](0)
+                priceLimit
             );
         }
     }
