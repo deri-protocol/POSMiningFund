@@ -27,26 +27,11 @@ contract RouterImplementation is RouterStorage {
 
     event LowLevelString(uint256 indexed index, bytes data);
 
-    event TradeWithMargin(
-        address indexed user,
-        address indexed pool,
-        address asset,
-        int256 amount,
-        string symbolName,
-        int256 tradeVolume,
-        int256 priceLimit,
-        address client
-    );
-
     event CreateRequestTrade(
         uint256 indexed index,
         uint256 indexed timestamp,
         address indexed account,
-        string action,
-        uint256 amount,
-        bool isAdd,
-        int256 priceLimit,
-        uint256 executionFee
+        string symbolName
     );
 
     event ExecuteTrade(
@@ -129,11 +114,7 @@ contract RouterImplementation is RouterStorage {
             tradeIndex,
             timestamp,
             account,
-            action,
-            amount,
-            isAdd,
-            priceLimit,
-            executionFee_
+            "BNBUSD"
         );
     }
 
