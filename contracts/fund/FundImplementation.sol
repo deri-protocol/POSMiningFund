@@ -19,6 +19,8 @@ contract FundImplementation is FundStorage, NameVersion {
     using SafeERC20 for IERC20;
     using Log for *;
 
+    event SetRouter(address router, bool isActive);
+
     event Invest(
         address indexed user,
         uint256 amount,
@@ -132,6 +134,10 @@ contract FundImplementation is FundStorage, NameVersion {
         _approvePool(address(pool), address(tokenB0));
     }
 
+    function setRouter(address router_, bool isActive) external _onlyAdmin_ {
+        isRouter[router_] = isActive;
+        emit SetRouter(router_, isActive);
+    }
 
     function invest(address user, uint256 amount, int256 priceLimit) external {
         require(isRouter[msg.sender], "fund: only router");
