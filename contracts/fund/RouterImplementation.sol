@@ -97,7 +97,6 @@ contract RouterImplementation is RouterStorage {
             "router: insufficient executionFee"
         );
 
-
         tradeIndex++;
         requestTrades[tradeIndex] = RequestTrade(
             tradeIndex,
@@ -128,7 +127,6 @@ contract RouterImplementation is RouterStorage {
         );
 
         bytes32 actionId = keccak256(abi.encodePacked(request.action));
-
         if (actionId == keccak256(abi.encodePacked("invest"))) {
             fund.invest(request.account, request.amount, request.priceLimit);
         } else if (actionId == keccak256(abi.encodePacked("claimRedeem"))) {
