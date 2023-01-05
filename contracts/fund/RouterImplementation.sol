@@ -31,7 +31,7 @@ contract RouterImplementation is RouterStorage {
         uint256 indexed index,
         uint256 indexed timestamp,
         address indexed account,
-        string symbolName
+        string[] symbolNames
     );
 
     event ExecuteTrade(
@@ -109,11 +109,13 @@ contract RouterImplementation is RouterStorage {
             executionFee_
         );
 
+        string[] memory symbolNames = new string[](1);
+        symbolNames[0] = "BNBUSD";
         emit CreateRequestTrade(
             tradeIndex,
             timestamp,
             account,
-            "BNBUSD"
+            symbolNames
         );
     }
 
