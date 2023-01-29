@@ -27,6 +27,8 @@ interface IPool is INameVersion, IAdmin {
 
     function collectProtocolFee() external;
 
+    function setRouter(address, bool) external;
+
     function claimVenusLp(address account) external;
 
     function claimVenusTrader(address account) external;
@@ -64,11 +66,15 @@ interface IPool is INameVersion, IAdmin {
 
     function tokenB0() external view returns (address);
 
+    function tokenWETH() external view returns (address);
+
     function vTokenB0() external view returns (address);
 
     function minRatioB0() external view returns (int256);
 
     function lToken() external view returns (IDToken);
+
+    function pToken() external view returns (IDToken);
 
     function decimalsB0() external view returns (uint256);
 

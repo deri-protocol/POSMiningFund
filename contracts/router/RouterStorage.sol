@@ -23,12 +23,16 @@ abstract contract RouterStorage is Admin {
         uint256 index;
         uint256 timestamp;
         address account;
-        string action;
-        uint256 amount;
-        bool isAdd;
+        address pool;
+        string symbolName;
+        int256 tradeVolume;
         int256 priceLimit;
+        address caller;
+        bytes[2] data;
+        uint256[2] value;
         uint256 executionFee;
     }
+
 
     struct OracleSignature {
         bytes32 oracleSymbolId;

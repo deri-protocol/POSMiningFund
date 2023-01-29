@@ -3,21 +3,25 @@
 pragma solidity >=0.8.0 <0.9.0;
 
 import "../pool/IPool.sol";
+import "./ISymbolManager.sol";
+import "./ISymbol.sol";
+import "../token/IDToken.sol";
 import "../oracle/IOracleManager.sol";
 import "../utils/Admin.sol";
 import "./RouterStorage.sol";
 import "../library/SafeMath.sol";
 import "../library/SafeERC20.sol";
-import "./IFund.sol";
+import "../library/RevertReasonParser.sol";
+import "../test/Log.sol";
 
 contract RouterImplementation is RouterStorage {
+    using Log for *;
+
     using SafeMath for int256;
 
     using SafeMath for uint256;
 
     using SafeERC20 for IERC20;
-
-    IFund public immutable fund;
 
     IOracleManager public immutable oracleManager;
 
@@ -37,27 +41,16 @@ contract RouterImplementation is RouterStorage {
     event ExecuteTrade(
         uint256 indexed index,
         uint256 indexed timestamp,
-        address indexed account,
-        string action,
-        uint256 amount,
-        bool isAdd,
-        int256 priceLimit,
-        uint256 executionFee
+        address indexed account
     );
 
     event CancelTrade(
         uint256 indexed index,
         uint256 indexed timestamp,
-        address indexed account,
-        string action,
-        uint256 amount,
-        bool isAdd,
-        int256 priceLimit,
-        uint256 executionFee
+        address indexed account
     );
 
-    constructor(address _fund, address _oracleManager) {
-        fund = IFund(_fund);
+    constructor(address _oracleManager) {
         oracleManager = IOracleManager(_oracleManager);
     }
 
@@ -82,15 +75,17 @@ contract RouterImplementation is RouterStorage {
     }
 
     function requestTrade(
-        string calldata action,
-        uint256 amount,
-        bool isAdd,
-        int256 priceLimit
+        address account,
+        address pool,
+        string memory symbolName,
+        int256 tradeVolume,
+        int256 priceLimit,
+        address caller,
+        bytes[2] calldata data,
+        uint256[2] calldata value
     ) external payable {
         uint256 timestamp = block.timestamp;
-        address account = msg.sender;
         uint256 executionFee_;
-
         executionFee_ = msg.value;
         require(
             executionFee_ >= executionFee,
@@ -102,15 +97,17 @@ contract RouterImplementation is RouterStorage {
             tradeIndex,
             timestamp,
             account,
-            action,
-            amount,
-            isAdd,
+            pool,
+            symbolName,
+            tradeVolume,
             priceLimit,
+            caller,
+            data,
+            value,
             executionFee_
         );
 
-        string[] memory symbolNames = new string[](1);
-        symbolNames[0] = "BNBUSD";
+        string[] memory symbolNames = getActiveSymbolNames(account, pool, symbolName);
         emit CreateRequestTrade(
             tradeIndex,
             timestamp,
@@ -119,36 +116,41 @@ contract RouterImplementation is RouterStorage {
         );
     }
 
-    function tryExecuteTrade(uint256 index, address executor) public {
+    function tryExecuteTrade(uint256 index, address executor) payable public {
         require(msg.sender == address(this), "router: should be internal call");
         RequestTrade memory request = requestTrades[index];
-
         require(
             request.timestamp + maxDelayTime >= block.timestamp,
             "router: request expired"
         );
+        if (request.data[0].length > 0) {
+            (bool success, bytes memory result) = request.caller.call{value:request.value[0]}(request.data[0]);
+            if (!success) {
+                revert(RevertReasonParser.parse(result, "callBytes failed: "));
+            }
+        }
 
-        bytes32 actionId = keccak256(abi.encodePacked(request.action));
-        if (actionId == keccak256(abi.encodePacked("invest"))) {
-            fund.invest(request.account, request.amount, request.priceLimit);
-        } else if (actionId == keccak256(abi.encodePacked("claimRedeem"))) {
-            fund.claimRedeem(request.account, request.priceLimit);
-        } else if (actionId == keccak256(abi.encodePacked("instantRedeem"))) {
-            fund.instantRedeem(request.account, request.priceLimit);
-        } else if (actionId == keccak256(abi.encodePacked("rebalance"))) {
-            fund.rebalance(request.account, request.isAdd, request.amount, request.priceLimit);
+        if (request.tradeVolume != 0 ) {
+            IPool(request.pool).trade(
+                    request.account,
+                    request.symbolName,
+                    request.tradeVolume,
+                    request.priceLimit
+            );
+        }
+
+        if (request.data[1].length > 0) {
+            (bool success, bytes memory result) = request.caller.call{value:request.value[1]}(request.data[1]);
+            if (!success) {
+                revert(RevertReasonParser.parse(result, "callBytes failed: "));
+            }
         }
 
         _transferOutETH(request.executionFee, executor);
         emit ExecuteTrade(
             request.index,
             request.timestamp,
-            request.account,
-            request.action,
-            request.amount,
-            request.isAdd,
-            request.priceLimit,
-            request.executionFee
+            request.account
         );
     }
 
@@ -161,13 +163,21 @@ contract RouterImplementation is RouterStorage {
         emit CancelTrade(
             request.index,
             request.timestamp,
-            request.account,
-            request.action,
-            request.amount,
-            request.isAdd,
-            request.priceLimit,
-            request.executionFee
+            request.account
         );
+    }
+
+    function getActiveSymbolNames(address account, address pool, string memory symbolName) public view returns (string[] memory) {
+        IDToken pToken = IDToken(IPool(pool).pToken());
+        ISymbolManager symbolManager = ISymbolManager(IPool(pool).symbolManager());
+        uint256 tokenId = pToken.getTokenIdOf(account);
+        address[] memory activeSymbols = symbolManager.getActiveSymbols(tokenId);
+        string[] memory symbolNamess = new string[](activeSymbols.length+1);
+        symbolNamess[0] = symbolName;
+        for (uint256 i = 0; i < activeSymbols.length; i++) {
+            symbolNamess[i+1] = ISymbol(activeSymbols[i]).symbol();
+        }
+        return symbolNamess;
     }
 
     function executeTrade(
@@ -188,13 +198,17 @@ contract RouterImplementation is RouterStorage {
         _updateOraclesWithTimestamp(request.timestamp, oracleSignatures);
 
         while (startIndex <= endIndex) {
-            try this.tryExecuteTrade(startIndex, executor) {} catch Error(
+            try this.tryExecuteTrade(startIndex, executor) {
+                startIndex.log("success");
+            } catch Error(
                 string memory reason
             ) {
                 emit ErrorString(startIndex, reason);
+                reason.log("reason");
                 try this.tryCancelTrade(startIndex) {} catch {}
             } catch (bytes memory reason) {
                 emit LowLevelString(startIndex, reason);
+                reason.log("reason");
                 try this.tryCancelTrade(startIndex) {} catch {}
             }
 
@@ -235,3 +249,8 @@ contract RouterImplementation is RouterStorage {
         require(success, "router: send ETH fail");
     }
 }
+
+
+
+
+

@@ -11,6 +11,7 @@ import "../swapper/ISwapper.sol";
 import "../pool/IPool.sol";
 import "../stake/IStaker.sol";
 import "./FundStorage.sol";
+import "../router/IRouter.sol";
 import "../test/Log.sol";
 
 contract FundImplementation is FundStorage, NameVersion {
@@ -24,8 +25,6 @@ contract FundImplementation is FundStorage, NameVersion {
     event Invest(
         address indexed user,
         uint256 amount,
-        uint256 bnbAmount,
-        uint256 marginAmount,
         int256 shareValue,
         uint256 newShareAmount
     );
@@ -66,9 +65,13 @@ contract FundImplementation is FundStorage, NameVersion {
 
     IERC20 public immutable tokenB0;
 
+    IERC20 public immutable tokenWETH;
+
     IStaker public immutable staker;
 
     IERC20 public immutable stakerBnb;
+
+    IRouter public immutable router;
 
     address public immutable symbolAddress;
 
@@ -111,16 +114,19 @@ contract FundImplementation is FundStorage, NameVersion {
     constructor(
         address _swapper,
         address _pool,
-        address _staker
+        address _staker,
+        address _router
     ) NameVersion("FundImplementation", "1.0.0") {
         swapper = ISwapper(_swapper);
         pool = IPool(_pool);
         tokenB0 = IERC20(pool.tokenB0());
+        tokenWETH = IERC20(pool.tokenWETH());
         oracleManager = ILensOracleManager(pool.oracleManager());
         lensPool = ILensPool(_pool);
 
         staker = IStaker(_staker);
         stakerBnb = IERC20(staker.stakerBnb());
+        router = IRouter(_router);
 
         symbolId = keccak256(abi.encodePacked(symbolName));
         symbolAddress = ILensSymbolManager(pool.symbolManager()).symbols(
@@ -139,22 +145,43 @@ contract FundImplementation is FundStorage, NameVersion {
         emit SetRouter(router_, isActive);
     }
 
-    function invest(address user, uint256 amount, int256 priceLimit) external {
-        require(isRouter[msg.sender], "fund: only router");
-
+    function invest(uint256 amount, int256 priceLimit) external payable {
+        address user = msg.sender;
         require(
             userRedeemRequests[user].share == 0,
             "invest: ongoing claim request"
         );
         require(amount > 0, "invest: zero amount");
-        // transfer in B0
-        tokenB0.safeTransferFrom(user, address(this), amount);
-
         // calculate shareValue before invest
         (int256 preTotalValue, int256 preShareValue, , ) = calculateTotalValue(
             true
         );
 
+        bytes[2] memory data;
+        uint256[2] memory value;
+        data[0] = abi.encodeWithSignature(
+            "investBefore(address,uint256)",
+            user, amount
+        );
+        data[1] = abi.encodeWithSignature(
+            "investAfter(address,uint256,int256,int256)",
+            user, amount, preTotalValue, preShareValue
+        );
+        
+        uint256 price = swapper.getTokenPrice(address(tokenWETH));
+        int256 extra = (amount * UONE / price).utoi();
+        int256 bnbDiff = getBalanceBnbDiff(extra);
+        router.requestTrade{value:msg.value}(address(this), address(pool), symbolName, -bnbDiff, priceLimit, address(this), data, value);
+    }
+
+    function investBefore(address user, uint256 amount) external {
+        require(isRouter[msg.sender], "fund: only router");
+        // transfer in B0
+        tokenB0.safeTransferFrom(user, address(this), amount);
+         // calculate shareValue before invest
+        (int256 preTotalValue, int256 preShareValue, , ) = calculateTotalValue(
+            true
+        );
         // B0 swap and stake
         uint256 stakingAmount = (amount * stakeRatio) / UONE;
         (, uint256 bnbAmount) = swapper.swapExactB0ForETH(stakingAmount);
@@ -169,20 +196,19 @@ contract FundImplementation is FundStorage, NameVersion {
             new IPool.OracleSignature[](0)
         );
 
-        balanceBnbDiff(priceLimit);
+    }
 
-        // calculate shareValue after invest and mint
+    function investAfter(address user, uint256 amount, int256 preTotalValue, int256 preShareValue) external payable {
+        require(isRouter[msg.sender], "fund: only router");
+
+         // calculate shareValue after invest and mint
         (int256 curTotalValue, , , ) = calculateTotalValue(true);
-
         uint256 mintShare = (((curTotalValue - preTotalValue) * ONE) /
             preShareValue).itou();
         _mint(user, mintShare);
-
         emit Invest(
             user,
             amount,
-            bnbAmount,
-            addAmount,
             preShareValue,
             mintShare
         );
@@ -230,23 +256,42 @@ contract FundImplementation is FundStorage, NameVersion {
         );
     }
 
+    function claimRedeem(int256 priceLimit) external payable {
+        address user = msg.sender;
+        require(userRedeemRequests[user].share > 0, "claimRedeem: no redeem record");
 
-    function claimRedeem(address user, int256 priceLimit) external {
+
+        bytes[2] memory data;
+        uint256[2] memory value;
+        data[0] = abi.encodeWithSignature(
+            "claimRedeemBefore(address)",
+            user
+        );
+        data[1] = abi.encodeWithSignature(
+            "claimRedeemAfter(address)",
+            user
+        );
+
+        int256 bnbDiff = getBalanceBnbDiff(-(userRedeemRequests[user].amountInBnb).utoi());
+        router.requestTrade{value:msg.value}(address(this), address(pool), symbolName, -bnbDiff, priceLimit, address(this), data, value);
+    }
+
+    function claimRedeemBefore(address user) external {
         require(isRouter[msg.sender], "fund: only router");
 
-        RedeemRequest storage redeemRequest = userRedeemRequests[user];
-        require(redeemRequest.share > 0, "claimRedeem: no redeem record");
-
+        RedeemRequest memory redeemRequest = userRedeemRequests[user];
         pendingBnb -= redeemRequest.amountInBnb;
         pendingShare -= redeemRequest.share;
+    }
 
-        // close bnb position
-        balanceBnbDiff(priceLimit);
+    function claimRedeemAfter(address user) external payable {
+        require(isRouter[msg.sender], "fund: only router");
 
         // calculate position value
         (, , int256 positionValue, int256 amountB0) = calculateTotalValue(
             false
         );
+        RedeemRequest memory redeemRequest = userRedeemRequests[user];
         uint256 removeAmount = (positionValue.itou() * redeemRequest.share) /
             totalSupply();
         if (amountB0 < 0) removeAmount += (-amountB0).itou();
@@ -272,11 +317,35 @@ contract FundImplementation is FundStorage, NameVersion {
     }
 
 
-    function instantRedeem(address user, int256 priceLimit) external {
-        require(isRouter[msg.sender], "fund: only router");
-
+    function instantRedeem(int256 priceLimit) external payable {
+        address user = msg.sender;
         uint256 amountShare = balanceOf(user);
         require(amountShare > 0, "requestRedeem: zero balance");
+        uint256 ratio = (amountShare * UONE) / (totalSupply() - pendingShare);
+        uint256 amountInStakerBnb = (stakerBnb.balanceOf(address(staker)) *
+            ratio) / UONE;
+
+        bytes[2] memory data;
+        uint256[2] memory value;
+        data[0] = abi.encodeWithSignature(
+            "instantRedeemBefore(address,uint256)",
+            user,amountInStakerBnb
+        );
+        data[1] = abi.encodeWithSignature(
+            "instantRedeemAfter(address,uint256)",
+            user, amountShare
+        );
+
+        int256 extra = - (staker.convertToBnb(amountInStakerBnb)).utoi();
+        int256 bnbDiff = getBalanceBnbDiff(extra);
+
+        router.requestTrade{value:msg.value}(address(this), address(pool), symbolName, -bnbDiff, priceLimit, address(this), data, value);
+    }
+
+
+    function instantRedeemBefore(address user, uint256 amountInStakerBnb) external {
+        require(isRouter[msg.sender], "fund: only router");
+        uint256 amountShare = balanceOf(user);
         IERC20(address(this)).safeTransferFrom(
             user,
             address(this),
@@ -284,13 +353,11 @@ contract FundImplementation is FundStorage, NameVersion {
         );
 
         // B0 swap and stake
-        uint256 ratio = (amountShare * UONE) / (totalSupply() - pendingShare);
-        uint256 amountInStakerBnb = (stakerBnb.balanceOf(address(staker)) *
-            ratio) / UONE;
         staker.swapStakerBnbToB0(amountInStakerBnb);
+    }
 
-        // close bnb position
-        balanceBnbDiff(priceLimit);
+    function instantRedeemAfter(address user, uint256 amountShare) external payable {
+        require(isRouter[msg.sender], "fund: only router");
 
         // calculate position value
         (, , int256 positionValue, int256 amountB0) = calculateTotalValue(
@@ -312,20 +379,41 @@ contract FundImplementation is FundStorage, NameVersion {
 
         // transfer out B0
         tokenB0.transfer(user, tokenB0.balanceOf(address(this)));
-
         emit InstantRedeem(user, block.timestamp, amountShare);
     }
 
-
-
     function rebalance(
-        address user,
+        bool isAdd,
+        uint256 amount,
+        int256 priceLimit
+    ) external payable{
+        require(hasRole(KEEPER_ROLE, msg.sender), "rebalance: keepers only");
+        bytes[2] memory data;
+        uint256[2] memory value;
+        data[0] = abi.encodeWithSignature(
+            "rebalanceBefore(bool,uint256,int256)",
+            isAdd,amount,priceLimit
+        );
+        data[1] = bytes("");
+
+        int256 extra;
+        if (isAdd) {
+            uint256 price = swapper.getTokenPrice(address(tokenWETH));
+            extra = (amount * UONE / price).utoi();
+        } else {
+            extra = - (staker.convertToBnb(amount)).utoi();
+        }
+        int256 bnbDiff = getBalanceBnbDiff(extra);
+        router.requestTrade{value:msg.value}(address(this), address(pool), symbolName, -bnbDiff, priceLimit, address(this), data, value);
+    }
+
+    function rebalanceBefore(
         bool isAdd,
         uint256 amount,
         int256 priceLimit
     ) external {
         require(isRouter[msg.sender], "fund: only router");
-        require(hasRole(KEEPER_ROLE, user), "rebalance: keepers only");
+
         if (isAdd) {
             uint256 tokenId = getPtokenId(address(this));
             AccountInfo memory accountInfo = getAccountInfo(tokenId);
@@ -352,8 +440,6 @@ contract FundImplementation is FundStorage, NameVersion {
                 new IPool.OracleSignature[](0)
             );
         }
-
-        balanceBnbDiff(priceLimit);
     }
 
     function _approveSwapper(address _swapper, address asset) internal {
@@ -512,24 +598,18 @@ contract FundImplementation is FundStorage, NameVersion {
     }
 
 
-    function balanceBnbDiff(int256 priceLimit) public returns (int256 diff) {
+    function getBalanceBnbDiff(int256 extra) public returns (int256 diff) {
         uint256 tokenId = getPtokenId(address(this));
         ILensSymbol s = ILensSymbol(symbolAddress);
         int256 shortAmount = s.positions(tokenId).volume;
         uint256 longAmount = pendingBnb +
             staker.convertToBnb(stakerBnb.balanceOf(address(staker)));
         diff =
-            ((longAmount.utoi() + shortAmount) / minTradeVolume) *
+            ((longAmount.utoi() + extra + shortAmount) / minTradeVolume) *
             minTradeVolume;
-        if (diff != 0) {
-            pool.trade(
-                address(this),
-                symbolName,
-                -diff,
-                priceLimit
-            );
-        }
     }
+
+
 }
 
 interface ILensPool {
