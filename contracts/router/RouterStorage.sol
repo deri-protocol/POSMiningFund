@@ -27,9 +27,8 @@ abstract contract RouterStorage is Admin {
         string symbolName;
         int256 tradeVolume;
         int256 priceLimit;
-        address caller;
-        bytes[2] data;
-        uint256[2] value;
+        ExtraCall beforeTrade;
+        ExtraCall afterTrade;
         uint256 executionFee;
     }
 
@@ -41,6 +40,12 @@ abstract contract RouterStorage is Admin {
         uint8 v;
         bytes32 r;
         bytes32 s;
+    }
+
+    struct ExtraCall {
+      address callee;
+      uint256 value;
+      bytes data;
     }
     // index => requestTrade
     mapping(uint256 => RequestTrade) public requestTrades;

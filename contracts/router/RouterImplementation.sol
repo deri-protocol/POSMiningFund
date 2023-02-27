@@ -8,10 +8,10 @@ import "./ISymbol.sol";
 import "../token/IDToken.sol";
 import "../oracle/IOracleManager.sol";
 import "../utils/Admin.sol";
-import "./RouterStorage.sol";
 import "../library/SafeMath.sol";
 import "../library/SafeERC20.sol";
 import "../library/RevertReasonParser.sol";
+import "./RouterStorage.sol";
 import "../test/Log.sol";
 
 contract RouterImplementation is RouterStorage {
@@ -75,15 +75,14 @@ contract RouterImplementation is RouterStorage {
     }
 
     function requestTrade(
-        address account,
         address pool,
         string memory symbolName,
         int256 tradeVolume,
         int256 priceLimit,
-        address caller,
-        bytes[2] calldata data,
-        uint256[2] calldata value
+        ExtraCall calldata beforeTrade,
+        ExtraCall calldata afterTrade
     ) external payable {
+        address account = msg.sender;
         uint256 timestamp = block.timestamp;
         uint256 executionFee_;
         executionFee_ = msg.value;
@@ -101,9 +100,8 @@ contract RouterImplementation is RouterStorage {
             symbolName,
             tradeVolume,
             priceLimit,
-            caller,
-            data,
-            value,
+            beforeTrade,
+            afterTrade,
             executionFee_
         );
 
@@ -123,8 +121,8 @@ contract RouterImplementation is RouterStorage {
             request.timestamp + maxDelayTime >= block.timestamp,
             "router: request expired"
         );
-        if (request.data[0].length > 0) {
-            (bool success, bytes memory result) = request.caller.call{value:request.value[0]}(request.data[0]);
+        if (request.beforeTrade.data.length > 0) {
+            (bool success, bytes memory result) = request.beforeTrade.callee.call{value:request.beforeTrade.value}(request.beforeTrade.data);
             if (!success) {
                 revert(RevertReasonParser.parse(result, "callBytes failed: "));
             }
@@ -136,11 +134,10 @@ contract RouterImplementation is RouterStorage {
                     request.symbolName,
                     request.tradeVolume,
                     request.priceLimit
-            );
+                );
         }
-
-        if (request.data[1].length > 0) {
-            (bool success, bytes memory result) = request.caller.call{value:request.value[1]}(request.data[1]);
+        if (request.afterTrade.data.length > 0) {
+            (bool success, bytes memory result) = request.afterTrade.callee.call{value:request.afterTrade.value}(request.afterTrade.data);
             if (!success) {
                 revert(RevertReasonParser.parse(result, "callBytes failed: "));
             }
@@ -172,13 +169,14 @@ contract RouterImplementation is RouterStorage {
         ISymbolManager symbolManager = ISymbolManager(IPool(pool).symbolManager());
         uint256 tokenId = pToken.getTokenIdOf(account);
         address[] memory activeSymbols = symbolManager.getActiveSymbols(tokenId);
-        string[] memory symbolNamess = new string[](activeSymbols.length+1);
-        symbolNamess[0] = symbolName;
+        string[] memory symbolNames = new string[](activeSymbols.length+1);
+        symbolNames[0] = symbolName;
         for (uint256 i = 0; i < activeSymbols.length; i++) {
-            symbolNamess[i+1] = ISymbol(activeSymbols[i]).symbol();
+            symbolNames[i+1] = ISymbol(activeSymbols[i]).symbol();
         }
-        return symbolNamess;
+        return symbolNames;
     }
+
 
     function executeTrade(
         uint256 endIndex,

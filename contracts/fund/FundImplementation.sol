@@ -145,6 +145,7 @@ contract FundImplementation is FundStorage, NameVersion {
         emit SetRouter(router_, isActive);
     }
 
+
     function invest(uint256 amount, int256 priceLimit) external payable {
         address user = msg.sender;
         require(
@@ -157,21 +158,22 @@ contract FundImplementation is FundStorage, NameVersion {
             true
         );
 
-        bytes[2] memory data;
-        uint256[2] memory value;
-        data[0] = abi.encodeWithSignature(
+        RouterStorage.ExtraCall[2] memory calls;
+        calls[0].callee = address(this);
+        calls[0].data =  abi.encodeWithSignature(
             "investBefore(address,uint256)",
             user, amount
         );
-        data[1] = abi.encodeWithSignature(
+        calls[1].callee = address(this);
+        calls[1].data = abi.encodeWithSignature(
             "investAfter(address,uint256,int256,int256)",
             user, amount, preTotalValue, preShareValue
         );
-        
+
         uint256 price = swapper.getTokenPrice(address(tokenWETH));
         int256 extra = (amount * UONE / price).utoi();
         int256 bnbDiff = getBalanceBnbDiff(extra);
-        router.requestTrade{value:msg.value}(address(this), address(pool), symbolName, -bnbDiff, priceLimit, address(this), data, value);
+        router.requestTrade{value:msg.value}(address(pool), symbolName, -bnbDiff, priceLimit, calls[0], calls[1]);
     }
 
     function investBefore(address user, uint256 amount) external {
@@ -260,20 +262,20 @@ contract FundImplementation is FundStorage, NameVersion {
         address user = msg.sender;
         require(userRedeemRequests[user].share > 0, "claimRedeem: no redeem record");
 
-
-        bytes[2] memory data;
-        uint256[2] memory value;
-        data[0] = abi.encodeWithSignature(
+        RouterStorage.ExtraCall[2] memory calls;
+        calls[0].callee = address(this);
+        calls[0].data =  abi.encodeWithSignature(
             "claimRedeemBefore(address)",
             user
         );
-        data[1] = abi.encodeWithSignature(
+        calls[1].callee = address(this);
+        calls[1].data = abi.encodeWithSignature(
             "claimRedeemAfter(address)",
             user
         );
 
         int256 bnbDiff = getBalanceBnbDiff(-(userRedeemRequests[user].amountInBnb).utoi());
-        router.requestTrade{value:msg.value}(address(this), address(pool), symbolName, -bnbDiff, priceLimit, address(this), data, value);
+        router.requestTrade{value:msg.value}(address(pool), symbolName, -bnbDiff, priceLimit, calls[0], calls[1]);
     }
 
     function claimRedeemBefore(address user) external {
@@ -325,13 +327,14 @@ contract FundImplementation is FundStorage, NameVersion {
         uint256 amountInStakerBnb = (stakerBnb.balanceOf(address(staker)) *
             ratio) / UONE;
 
-        bytes[2] memory data;
-        uint256[2] memory value;
-        data[0] = abi.encodeWithSignature(
+        RouterStorage.ExtraCall[2] memory calls;
+        calls[0].callee = address(this);
+        calls[0].data =  abi.encodeWithSignature(
             "instantRedeemBefore(address,uint256)",
             user,amountInStakerBnb
         );
-        data[1] = abi.encodeWithSignature(
+        calls[1].callee = address(this);
+        calls[1].data = abi.encodeWithSignature(
             "instantRedeemAfter(address,uint256)",
             user, amountShare
         );
@@ -339,7 +342,7 @@ contract FundImplementation is FundStorage, NameVersion {
         int256 extra = - (staker.convertToBnb(amountInStakerBnb)).utoi();
         int256 bnbDiff = getBalanceBnbDiff(extra);
 
-        router.requestTrade{value:msg.value}(address(this), address(pool), symbolName, -bnbDiff, priceLimit, address(this), data, value);
+        router.requestTrade{value:msg.value}(address(pool), symbolName, -bnbDiff, priceLimit, calls[0], calls[1]);
     }
 
 
@@ -388,13 +391,15 @@ contract FundImplementation is FundStorage, NameVersion {
         int256 priceLimit
     ) external payable{
         require(hasRole(KEEPER_ROLE, msg.sender), "rebalance: keepers only");
-        bytes[2] memory data;
-        uint256[2] memory value;
-        data[0] = abi.encodeWithSignature(
+
+        RouterStorage.ExtraCall[2] memory calls;
+        calls[0].callee = address(this);
+        calls[0].data =  abi.encodeWithSignature(
             "rebalanceBefore(bool,uint256,int256)",
             isAdd,amount,priceLimit
         );
-        data[1] = bytes("");
+//        calls[1].callee = address(this);
+//        calls[1].data = bytes("");
 
         int256 extra;
         if (isAdd) {
@@ -404,7 +409,7 @@ contract FundImplementation is FundStorage, NameVersion {
             extra = - (staker.convertToBnb(amount)).utoi();
         }
         int256 bnbDiff = getBalanceBnbDiff(extra);
-        router.requestTrade{value:msg.value}(address(this), address(pool), symbolName, -bnbDiff, priceLimit, address(this), data, value);
+        router.requestTrade{value:msg.value}(address(pool), symbolName, -bnbDiff, priceLimit, calls[0], calls[1]);
     }
 
     function rebalanceBefore(
